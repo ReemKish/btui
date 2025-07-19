@@ -1,0 +1,89 @@
+#!/bin/env bash
+
+COLOR_SALMON=209
+source colors
+
+# fgcolor() { tput setaf ${COLORS[$1]} >&2; }
+setrgb() {
+  local r=$1 g=$2 b=$3
+  echo -ne "\e[38;2;${r};${g};${b}m"
+} >&2;
+fgcolor() { tput setaf ${COLORS[$1]}; } >&2
+bgcolor() { tput setab ${COLORS[$1]}; } >&2
+resetcolor() { tput sgr0; } >&2
+
+getyx() {
+  IFS='[;' read -p $'\e[6n' -d R -rs _ Y X _
+  printf -v "$1" '%s' "$((--Y))"
+  printf -v "$2" '%s' "$((--X))"
+} >&2
+
+getx() {
+  IFS='[;' read -p $'\e[6n' -d R -rs _ Y X _
+  echo $((--X))
+}
+
+gety() {
+  IFS='[;' read -p $'\e[6n' -d R -rs _ Y X _
+  echo $((--Y))
+}
+
+
+setyx() {
+  (( n_scroll = INIT_Y + $y + $1 - $(ymax) + 1 ))
+  if (( n_scroll > 0 )); then
+    tput cup $(ymax) 0
+    for _ in $(seq $n_scroll); do echo; (( --INIT_Y )); done
+  fi
+  setabsyx $((INIT_Y+y+$1)) $((INIT_X+x+$2))
+} >&2
+
+setabsyx() {
+  tput cup $(($1<0?0:$1)) $(($2<0?0:$2))
+} >&2
+
+ymax() { tput lines; }
+xmax() { tput cols; }
+
+addstr() {
+  if [[ $# == 3 ]]; then
+    tput sc
+    setyx $2 $3
+    echo -n "$1"
+    tput rc
+  else
+    echo -n "$1"
+  fi
+} >&2
+
+insch() {
+  if [[ $# == 3 ]]; then
+    tput sc
+    setyx $2 $3
+    echo -n "$1"; tput cub1
+    tput rc
+  else
+    echo -n "$1"; tput cub1;
+  fi
+} >&2
+
+getkey() {
+  read -rsn1 key
+  read -rsn1 -t 0.0001 k1
+  read -rsn1 -t 0.0001 k2
+  read -rsn1 -t 0.0001 k3
+  echo $key$k1$k2$k3
+}
+
+reserve() {
+  (( delta = y + $1 - $(ymax), vertpad = delta < 0 ? 0 : delta ))
+  for _ in $(seq $(($1-1))); do echo; done
+  for _ in $(seq $vertpad); do (( --y )); (( --INIT_Y )); done
+} >&2
+
+scroll() {
+  tput sc
+  tput cup $(ymax) 0
+  for _ in $(seq $1); do echo; (( --INIT_Y )); done
+  tput rc
+} >&2

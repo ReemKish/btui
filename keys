@@ -1,7 +1,0 @@
-#!/bin/bash
-declare -A KEYS=(
-  [UP]=$'\e[A'
-  [DN]=$'\e[B'
-  [CR]=""
-)
-

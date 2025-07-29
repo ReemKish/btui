@@ -152,6 +152,7 @@ _imenu() {
   local -i x=${x-0} y=${y-0}
   local -i curr=${curr-0}
   local -i prev=0
+  local KEY
   _draw_menu "${labels[@]}"
   while true; do
     prev=$curr

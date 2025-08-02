@@ -339,7 +339,7 @@ draw_box() {
   local -r top="$tl$hline$tr"
   local -r bot="$bl$hline$br"
   _addstr "$top"
-  dy=$((w-1)) _addstr "$bot"
+  dy=$((h-1)) _addstr "$bot"
   for ((i = 1; i < h - 1; i++)); do
     y=$i _addstr "$vlines"
   done

@@ -4,8 +4,14 @@ declare -A COLORS=([black]=0 [maroon]=1 [green]=2 [olive]=3 [navy]=4 [purple]=5 
 declare -A KEYS=([UP]=$'\e[A' [DOWN]=$'\e[B' [LEFT]=$'\e[C' [RIGHT]=$'\e[D' [CR]="" [ESC]=$'\e')
 
 # Colorscheme
-declare -r COLOR_DEFAULT='#f0f0f0'
-declare -r COLOR_SELECTED='#ffaf87'
+declare -r COLOR_DEFAULT=\#f0f0f0
+declare -r COLOR_SELECTED=\#ffaf87
+declare -r COLOR_SWITCHER_ARROW=\#707070
+
+# Spinners
+declare -r SPINNER_SCROLLING_DOTS=(".  "  ".. " "..." " .." "  ." "   ")
+declare -r SPINNER_AESTHETIC1=('▰▱▱▱▱▱▱' '▰▰▱▱▱▱▱' '▰▰▰▱▱▱▱' '▰▰▰▰▱▱▱' '▰▰▰▰▰▱▱' '▰▰▰▰▰▰▱' '▰▰▰▰▰▰▰' '▰▱▱▱▱▱▱')
+declare -r SPINNER_AESTHETIC2=('▰▱▱▱▱▱▱' '▰▰▱▱▱▱▱' '▰▰▰▱▱▱▱' '▰▰▰▰▱▱▱' '▱▰▰▰▰▱▱' '▱▱▰▰▰▰▱' '▱▱▱▰▰▰▰' '▱▱▱▱▰▰▰' '▱▱▱▱▱▰▰' '▱▱▱▱▱▱▰' '▱▱▱▱▱▱▱')
 
 declare -r DEFAULT_RGB_TRANSITION_DURTATION=0.15
 
@@ -17,14 +23,15 @@ getyx() {
 }
 
 setyx() {
-  (( n_scroll = y + $1 + _BTUI__INIT_Y - _BTUI__MAX_Y ))
+  local -i dy=${1-0} dx=${2-0}
+  (( n_scroll = y + $dy + _BTUI__INIT_Y - _BTUI__MAX_Y ))
   if (( n_scroll > 0 )); then
     echo -ne "\e[$_BTUI__MAX_Y;0H"
     for _ in $(seq $n_scroll); do echo; (( --_BTUI__INIT_Y )); done
   fi
   local -i absy absx;
   getabsyx absy absx;
-  setabsyx $((absy + $1)) $((absx + $2))
+  setabsyx $((absy + "$dy")) $((absx + "$dx"))
 }
 
 getabsyx() {
@@ -39,7 +46,6 @@ setabsyx() {
 }
 
 _addstr() {
-  local -i dy=${dy-0} dx=${dx-0}
   setyx "$dy" "$dx"
   echo -en "$*"
 }
@@ -100,6 +106,8 @@ _gen_rgbtrans() {
 }
 
 _addstr_rgbtrans() {
+  local -i x=${x-0} y=${y-0}
+  x+=dx; y+=dy; unset dx dy
   local -r str="$1"
   local -rn transname="$2"
   local -r duration=${3-$DEFAULT_RGB_TRANSITION_DURTATION}
@@ -125,20 +133,6 @@ _center() {
 
 
 ################################  MENU ELEMENT  ################################
-
-__erase_menu() {
-  local x=${x-0} y=${y-0} choice=${choice-1}
-  for i in $(seq $#); do
-    setyx $((i-1)) 0
-    local opt=${!i}
-    _addstr "  "
-    _addstr "$(printf '%*s' ${#opt})"
-    color reset
-  done
-  setyx 0 0
-}
-
-
 _draw_menu() {
   local x=${x-0} y=${y-0}
   local -i curr=${curr-0}
@@ -159,6 +153,8 @@ _draw_menu() {
 
 
 _imenu() {
+  local -i x=${x-0} y=${y-0}
+  x+=dx; y+=dy; unset dx dy
   local -n outvar="$1"
   local labels=("${@:2}")
   local -i x=${x-0} y=${y-0}
@@ -186,10 +182,10 @@ _imenu() {
       } ;;
       *) continue ;;
     esac
-    y=$((y+curr)) _addstr "$(color $COLOR_SELECTED)>"
-    y=$((y+prev)) _addstr "  "
-    y=$((y+prev)) x=$((x+2)) _addstr_rgbtrans "${labels[prev]}" _RGBTRANS_MENU_DESELECT "$(bc -l <<< "$DEFAULT_RGB_TRANSITION_DURTATION * 1.5")" &
-    y=$((y+curr)) x=$((x+2)) _addstr_rgbtrans "${labels[curr]}" _RGBTRANS_MENU_SELECT
+    dy=$curr _addstr "$(color $COLOR_SELECTED)>"
+    dy=$prev _addstr "  "
+    dy=$prev dx=2 _addstr_rgbtrans "${labels[prev]}" _RGBTRANS_MENU_DESELECT "$(bc -l <<< "$DEFAULT_RGB_TRANSITION_DURTATION * 1.5")" &
+    dy=$curr dx=2 _addstr_rgbtrans "${labels[curr]}" _RGBTRANS_MENU_SELECT
     _flush_stdin
   done
   # shellcheck disable=SC2034
@@ -202,7 +198,6 @@ _iswitcher() {
   local -n outvar="$1"
   local labels=("${@:2}")
   local -i x=${x-0} y=${y-0}
-  local -i dx=${dx-0} dy=${dy-0}
   x+=dx; y+=dy; unset dx dy
   local -i curr=${curr-0}
   local -i prev=0
@@ -217,7 +212,7 @@ _iswitcher() {
     labels[i]=$(_center "${labels[i]}" $maxlen)
   done
 
-  color \#707070
+  color $COLOR_SWITCHER_ARROW
   dy=-1 _addstr "$(_center "▲" $maxlen)"
   dy=1 _addstr "$(_center "▼" $maxlen)"
   _addstr_rgbtrans "${labels[curr]}" _RGBTRANS_MENU_SELECT
@@ -227,11 +222,18 @@ _iswitcher() {
     getkey KEY
     case "$KEY" in
       "${KEYS[CR]}" | "${KEYS[LEFT]}" | 'l') break ;;
-      "${KEYS[UP]}" | 'k') curr=(${#labels[@]}+curr-1)%${#labels[@]} ;;
-      "${KEYS[DOWN]}" | 'j') curr=(curr+1)%${#labels[@]} ;;
+      "${KEYS[UP]}" | 'k')
+        curr=(curr+1)%${#labels[@]}
+        _addstr "${labels[curr]}"
+        dy=-1 _addstr_rgbtrans "$(_center "▲" $maxlen)" _RGBTRANS_SWITCHER_SWITCH
+        ;;
+      "${KEYS[DOWN]}" | 'j')
+        curr=(${#labels[@]}+curr-1)%${#labels[@]}
+        _addstr "${labels[curr]}"
+        dy=1 _addstr_rgbtrans "$(_center "▼" $maxlen)" _RGBTRANS_SWITCHER_SWITCH
+        ;;
       *) continue ;;
     esac
-    _addstr "${labels[curr]}"
   done
   _flush_stdin
   dy=-1 _addstr "$(printf "%${maxlen}s" "")"
@@ -242,6 +244,25 @@ _iswitcher() {
 }
 
 
+_spinner() {
+  local -i x=${x-0} y=${y-0}
+  x+=dx; y+=dy; unset dx dy
+  local -n spinchars=${1-SPINNER_SCROLLING_DOTS}
+  # local -r str="$1"
+  # local -rn transname="$2"
+  # local -r duration=${3-$DEFAULT_RGB_TRANSITION_DURTATION}
+  # local -r delay=$(bc -l <<< "$duration/${#transname[@]}")
+  setyx 0 0
+  getabsyx absy absx
+  while true; do
+    for spinchar in "${spinchars[@]}"; do
+      # echo -en "\e[s\e[$absy;${absx}H${color_ansi}$spinchar\e[u"
+      echo -en "\e[s\e[$absy;${absx}H$spinchar\e[u"
+      # sleep "$delay"
+      sleep 0.12
+    done
+  done
+}
 ####################################  API  #####################################
 # setpos() {
 #   declare -i y=0 x=0
@@ -273,7 +294,6 @@ color() {
 
 menu() {
   local -i x=${x-0} y=${y-0}
-  local -i dx=${dx-0} dy=${dy-0}
   x+=dx; y+=dy; unset dx dy
   local chosen
   eval set -- "$(getopt -o c: -- "$@")"
@@ -287,9 +307,6 @@ menu() {
 }
 
 imenu() {
-  local -i x=${x-0} y=${y-0}
-  local -i dx=${dx-0} dy=${dy-0}
-  x+=dx; y+=dy; unset dx dy
   local chosen
   eval set -- "$(getopt -o c: -- "$@")"
   while true; do
@@ -302,15 +319,11 @@ imenu() {
 }
 
 iswitcher() {
-  local -i x=${x-0} y=${y-0}
-  local -i dx=${dx-0} dy=${dy-0}
-  x+=dx; y+=dy; unset dx dy
   _iswitcher "$@"
 }
 
 addstr() {
   local -i x=${x-0} y=${y-0}
-  local -i dx=${dx-0} dy=${dy-0}
   x+=dx; y+=dy; unset dx dy
   _addstr "$@"
 }
@@ -318,7 +331,6 @@ addstr() {
 
 fill_rect() {
   local -i x=${x-0} y=${y-0}
-  local -i dx=${dx-0} dy=${dy-0}
   x+=dx; y+=dy; unset dx dy
   local -i w=$1 h=$2
   local -r fillchar=${3-' '}
@@ -330,7 +342,6 @@ fill_rect() {
 
 draw_box() {
   local -i x=${x-0} y=${y-0}
-  local -i dx=${dx-0} dy=${dy-0}
   x+=dx; y+=dy; unset dx dy
   local -i w=$1 h=$2
   local -r hchar="─" vchar="│" tl="┌" tr="┐" bl="└" br="┘"
@@ -345,6 +356,10 @@ draw_box() {
   done
 }
 
+spinner() {
+  _spinner "$@"
+}
+
 
 ####################################  INIT  ####################################
 declare -n _BTUI__MAX_Y=LINES _BTUI__MAX_X=COLUMNS
@@ -354,6 +369,7 @@ declare -i _BTUI__INIT_Y
 # RGB Transitions
 _gen_rgbtrans _RGBTRANS_MENU_SELECT "$COLOR_DEFAULT" "$COLOR_SELECTED" 20
 _gen_rgbtrans _RGBTRANS_MENU_DESELECT "$COLOR_SELECTED" "$COLOR_DEFAULT" 20
+_gen_rgbtrans _RGBTRANS_SWITCHER_SWITCH "$COLOR_SELECTED" "$COLOR_SWITCHER_ARROW" 20
 
 setup() {
   stty -echo
